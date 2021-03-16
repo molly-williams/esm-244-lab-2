@@ -1,0 +1,163 @@
+---
+title: "244 Lab 2"
+author: "Molly Williams"
+date: "1/17/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load}
+
+library(tidyverse)
+library(janitor)
+library(MASS)
+library(RColorBrewer)
+library(factoextra)
+library(shinythemes)
+library(ggrepel)
+
+
+# To install ggbiplot, install development version
+library(devtools)
+install_github("vqv/ggbiplot")
+library(ggbiplot)
+```
+
+
+
+If you want to override (set) a function maually throughout an entire workspace, you can assign the function name explicitly:
+
+```{r}
+
+select <- dplyr::select #general override, tells R to use the select function from the dplyr package
+```
+
+###1. Ordinal logistic regression for political party affiliation by ethnicity, age, sex
+
+```{r}
+
+pol_party <- read_csv("pol_party.csv") %>% 
+  clean_names() %>% 
+  select(participant_id:read_carefully)
+
+# a little more wrangling:
+
+pol_df <- pol_party %>% 
+  select(birth_year, gender, ethnicity, political_party) %>% 
+  filter(birth_year > 1900, political_party != "NA", political_party <= 7) %>% 
+  mutate(age = 2016 - birth_year)
+
+
+# Political party: 1 = very liberal, 7 = very conservative
+
+# When doing OLR we want our dependent variable to be of class ORDERED FACTOR
+
+pol_df$political_party <- factor(pol_df$political_party, ordered = TRUE, levels = c("1", "2", "3", "4", "5", "6", "7"))
+
+
+# Update our categorical predictor variables to factors too:
+
+pol_df$ethnicity <- factor(pol_df$ethnicity)
+pol_df$gender <- factor(pol_df$gender)
+
+```
+
+
+#### Basic data exploration and visualization
+
+```{r}
+
+# Create new df with counts by race: - but whites are so heavily represented in responses that it's not useful to analyze based on this factor
+counts_eth <- pol_df %>% 
+  group_by(ethnicity, political_party) %>% 
+  tally()
+
+# Create new df with counts by gender:
+counts_g <- pol_df %>% 
+  group_by(gender, political_party) %>% 
+  tally()
+
+# just because you don't get an error message doesn't mean your method is good (:
+
+
+ggplot(pol_df, aes(x = political_party)) +
+  geom_histogram(aes(fill = ethnicity), stat = "count") +
+  scale_fill_brewer(palette = "YlGnBu") +
+  facet_wrap(~ethnicity, scales = "free")
+
+```
+
+
+#### THESE DATA ARE PRECARIOUS AND N IS TOO SMALL!!! FOR GROUPS
+```{r}
+
+### This is not publishable data!! Data is so biased that it gives the audience an idea that something is happening, but the sample size is super small
+
+pol_model <- polr(political_party ~ age + gender + ethnicity, data = pol_df)
+
+summary(pol_model)
+
+exp(coef(pol_model))
+
+# Once we've decided on a model, we can always make predictions using it:
+
+predictions <- predict(pol_model, type = "probs")
+
+df <- data.frame(pol_df, predictions) # generates a model prediction for each point, can visualize in ggplot and see how it aligns with actual selections made by respondents
+
+```
+
+
+### 2. Principal components analysis (PCA)
+#### ...Using World Bank environmental indicators
+
+
+```{r}
+ wb_10 <- read_csv("wb_10.csv") %>% 
+  select(-X1) %>% # removes this column 
+  column_to_rownames('code') # changes all of the row labels to country codes
+
+wb_pca <- prcomp(wb_10[3:8], scale = TRUE) # data are on different scales, so perform scale function
+
+summary(wb_pca)
+
+ggbiplot(wb_pca) +
+  geom_text_repel(label = rownames(wb_10), size = 2, segment.size = 0.2) +
+  theme_bw()
+
+# factoextra package (built to help visualize outcomes of ordination methods)
+
+# scree plot:
+
+fviz_screeplot(wb_pca)
+
+# See contributions of variables to different components:
+
+fviz_contrib(wb_pca, choice = "var", axes = 1, top = 6) # can change axes to 2 to look at PC2
+
+# Biplot showing points and vectors:
+
+fviz_pca_biplot(wb_pca,
+                col.var = "cos2", 
+                label = "var",
+                repel = "TRUE")
+
+# col.var = cos2 is a metric of how well represented variables are in PC1 (highly related with what is on pc2, but can check the loadings for where variables start having the greatest impact)
+  
+```
+
+
+### 3. SHINY APP TIME!
+
+
+
+
+
+
+
+
+
+
